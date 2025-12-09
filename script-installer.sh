@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-########################################
-# CONFIG (opsional, cuma buat summary)
-########################################
-
-MYSQL_REPO_RPM_URL="${MYSQL_REPO_RPM_URL:-https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm}"
-
 log()  { echo -e "[INFO ] $*"; }
 warn() { echo -e "[WARN ] $*" >&2; }
 err()  { echo -e "[ERROR] $*" >&2; exit 1; }
@@ -33,7 +27,7 @@ fi
 log "OS terdeteksi: ${PRETTY_NAME}"
 
 ########################################
-# UPDATE OS & PAKET DASAR
+# UPDATE OS & TOOLS DASAR
 ########################################
 
 log "Update paket sistem..."
@@ -43,7 +37,7 @@ log "Install tools dasar (curl, wget, tar, editor)..."
 dnf install -y curl wget tar nano vim sudo
 
 ########################################
-# REPO: EPEL + REMI (untuk PHP 7.4)
+# EPEL + REMI (PHP 7.4)
 ########################################
 
 log "Install EPEL & Remi repo..."
@@ -55,27 +49,19 @@ dnf module reset php -y
 dnf module enable php:remi-7.4 -y
 
 ########################################
-# INSTALL MYSQL 8 COMMUNITY (SERVER)
+# DATABASE SERVER: MARIADB (BUILT-IN ROCKY)
 ########################################
 
-log "Setup MySQL Community 8 (repo + server)..."
+log "Install MariaDB server (pengganti MySQL)..."
+dnf install -y mariadb-server
 
-if ! rpm -qa | grep -q "mysql80-community-release"; then
-  log "Menginstall MySQL Yum repo RPM..."
-  dnf install -y "${MYSQL_REPO_RPM_URL}" || rpm -Uvh "${MYSQL_REPO_RPM_URL}"
-else
-  log "MySQL Yum repo sudah terpasang, skip."
-fi
+log "Enable & start mariadb..."
+systemctl enable --now mariadb
 
-dnf install -y mysql-community-server
-
-log "Enable & start mysqld..."
-systemctl enable --now mysqld
-
-log "MySQL 8 terinstall. Jalankan 'mysql_secure_installation' manual setelah ini kalau mau hardening."
+log "MariaDB terinstall. Jalankan 'mysql_secure_installation' manual nanti untuk hardening."
 
 ########################################
-# INSTALL APACHE + PHP 7.4 + EXTENSION
+# APACHE + PHP 7.4 + EXTENSION
 ########################################
 
 log "Install Apache, PHP-FPM, dan extension penting..."
@@ -103,7 +89,6 @@ dnf install -y \
   php-process \
   php-xsl
 
-# Extension ekstra yang ada di server lama
 log "Install extension ekstra (ssh2, grpc, protobuf, mcrypt)..."
 dnf install -y \
   php-pecl-ssh2 \
@@ -115,7 +100,7 @@ log "Enable & start httpd + php-fpm..."
 systemctl enable --now httpd php-fpm
 
 ########################################
-# JAVA 11 (untuk JasperReports)
+# JAVA 11
 ########################################
 
 log "Install OpenJDK 11..."
@@ -145,20 +130,18 @@ log "INSTALASI DASAR SELESAI (TANPA CONFIG)."
 echo
 echo "=== RINGKASAN ==="
 echo "- OS              : ${PRETTY_NAME}"
-echo "- MySQL server    : mysql-community-server"
+echo "- DB Server       : MariaDB (mariadb-server)"
 echo "- Apache          : httpd"
 echo "- PHP             : $(php -v | head -n1)"
 echo "- PHP modules     : cek dengan 'php -m'"
 echo "- Apache status   : systemctl status httpd"
 echo "- PHP-FPM status  : systemctl status php-fpm"
-echo "- MySQL status    : systemctl status mysqld"
+echo "- MariaDB status  : systemctl status mariadb"
 echo "- Java            : $(java -version 2>&1 | head -n1 || echo 'n/a')"
 echo "- Git             : $(git --version 2>/dev/null || echo 'git tidak terbaca di PATH')"
 echo "- Composer        : $(composer -V 2>/dev/null || echo 'composer tidak terbaca di PATH')"
 echo
-echo "=== CATATAN ==="
-echo "- Script ini HANYA instal paket dan mengaktifkan service dasar (mysqld, httpd, php-fpm)."
-echo "- Tidak ada konfigurasi vhost Apache, tidak ada edit php-fpm pool, tidak ada firewall/fail2ban."
-echo "- Langkah berikutnya: restore kode aplikasi, restore database, dan konfigurasi Apache/PHP dilakukan manual."
+echo "Script ini HANYA install paket & start servicenya."
+echo "Konfigurasi vhost Apache, PHP-FPM pool, dan restore aplikasi/DB kamu lakukan manual."
 echo
 log "Selesai."
